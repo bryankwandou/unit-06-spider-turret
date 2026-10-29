@@ -4,12 +4,9 @@ export const ReticleOverlay: React.FC = () => {
   return (
     <div className="reticle-overlay" aria-hidden="true">
       <svg
-        width="760"
-        height="760"
         viewBox="0 0 760 760"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ maxWidth: '78vh', maxHeight: '78vh', overflow: 'visible' }}
       >
         {/* Top Bore Axis Label */}
         <text

@@ -14,7 +14,7 @@ import {
   SpiderTurretRig,
 } from './three/spiderTurretModel';
 import { ReticleOverlay } from './components/ReticleOverlay';
-import { TopBar } from './components/TopBar';
+import { TopLeftHeader, TopRightCameraBar } from './components/TopBar';
 import { KinematicsPanel } from './components/KinematicsPanel';
 import { OrthoStrip } from './components/OrthoStrip';
 import { CadBlueprintsPanel } from './components/CadBlueprintsPanel';
@@ -49,8 +49,17 @@ function getCameraSphericalForPreset(preset: CameraPreset): {
   }
 }
 
+function computeUiScale(w: number, h: number): number {
+  const scaleX = w / 1500;
+  const scaleY = h / 880;
+  return Math.max(0.38, Math.min(1.15, Math.min(scaleX, scaleY)));
+}
+
 export const App: React.FC = () => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const [uiScale, setUiScale] = useState<number>(() =>
+    typeof window !== 'undefined' ? computeUiScale(window.innerWidth, window.innerHeight) : 1
+  );
 
   const [posture, setPosture] = useState<PostureMode>('Stand');
   const [activeCamera, setActiveCamera] = useState<CameraPreset>('3/4 STUDIO');
@@ -162,7 +171,6 @@ export const App: React.FC = () => {
   const handleSelectPosture = useCallback((mode: PostureMode) => {
     setPosture(mode);
     simRef.current.posture = mode;
-    // Clear manual limb offsets when selecting a gait
     simRef.current.manualLimbOffsets.forEach((o) => {
       o.femurDelta = 0;
       o.tibiaDelta = 0;
@@ -440,8 +448,10 @@ export const App: React.FC = () => {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      setUiScale(computeUiScale(w, h));
     };
     window.addEventListener('resize', onResize);
+    onResize();
 
     // High-Precision Simulation Loop
     let lastTime = performance.now();
@@ -465,7 +475,12 @@ export const App: React.FC = () => {
           effectivePosture = shift ? 'Sprint' : 'Fast Walk';
         } else if (keys.has('s') || keys.has('arrowdown')) {
           effectivePosture = 'Fast Reverse';
-        } else if (keys.has('a') || keys.has('d') || keys.has('arrowleft') || keys.has('arrowright')) {
+        } else if (
+          keys.has('a') ||
+          keys.has('d') ||
+          keys.has('arrowleft') ||
+          keys.has('arrowright')
+        ) {
           effectivePosture = 'Turn';
         } else {
           effectivePosture = 'Stand';
@@ -478,7 +493,8 @@ export const App: React.FC = () => {
       turretRig.setExplodeFactor(s.explodeCurrent);
 
       // 3. Gimbal Aim Smoothing
-      s.currentGimbalYawDeg += (s.targetGimbalYawDeg - s.currentGimbalYawDeg) * Math.min(1, dt * 10);
+      s.currentGimbalYawDeg +=
+        (s.targetGimbalYawDeg - s.currentGimbalYawDeg) * Math.min(1, dt * 10);
       s.currentGimbalPitchDeg +=
         (s.targetGimbalPitchDeg - s.currentGimbalPitchDeg) * Math.min(1, dt * 10);
 
@@ -502,13 +518,12 @@ export const App: React.FC = () => {
       turretRig.updateThermalGlow(s.barrelTemp);
 
       if (s.isFiring && s.rotaryRpm > 80) {
-        s.shotAccumulator += dt * 18; // 18 rounds/sec visual cadence
+        s.shotAccumulator += dt * 18;
         while (s.shotAccumulator >= 1) {
           s.shotAccumulator -= 1;
           s.firedRounds += 1;
           turretRig.spawnCasing();
         }
-        // Recoil vibration & muzzle flash flicker
         const recoilKick = Math.sin(now * 0.085) * 0.032;
         turretRig.cannonRecoilGroup.position.z = -0.025 + recoilKick;
         turretRig.muzzleFlashGroup.visible = Math.sin(now * 0.12) > -0.25;
@@ -522,7 +537,7 @@ export const App: React.FC = () => {
       for (const c of turretRig.casingsPool) {
         if (!c.active) continue;
         c.age += dt;
-        c.velocity.y -= 9.8 * dt; // Gravity
+        c.velocity.y -= 9.8 * dt;
         c.mesh.position.addScaledVector(c.velocity, dt);
         c.mesh.rotation.x += c.angularVelocity.x * dt;
         c.mesh.rotation.y += c.angularVelocity.y * dt;
@@ -614,7 +629,6 @@ export const App: React.FC = () => {
 
       s.gaitPhase += dt * gaitSpeed;
 
-      // Diagonal Spider Pairs: (0 & 2) vs (1 & 3)
       const phaseOffsets = [0, Math.PI, 0, Math.PI];
       const computedLimbs: [LimbKinematics, LimbKinematics, LimbKinematics, LimbKinematics] = [
         { ...INITIAL_LIMB },
@@ -629,7 +643,6 @@ export const App: React.FC = () => {
         const sinPh = Math.sin(ph);
         const cosPh = Math.cos(ph);
 
-        // Direction sign for left vs right side legs during forward/reverse vs turn
         const sideSign = effectivePosture === 'Turn' ? 1 : i === 0 || i === 1 ? 1 : -1;
         const coxaYaw = cosPh * strideYawAmp * sideSign;
         const stepLift = Math.max(0, sinPh) * liftPitchAmp;
@@ -650,7 +663,6 @@ export const App: React.FC = () => {
 
       applyLimbKinematics(turretRig, computedLimbs);
 
-      // Subtle Pelvis Bob & Head Sync
       const bobOffset =
         effectivePosture === 'Stand' || effectivePosture === 'Sit'
           ? Math.sin(s.gaitPhase) * 0.006
@@ -680,7 +692,7 @@ export const App: React.FC = () => {
 
       renderer.render(scene, camera);
 
-      // 7. Throttled Telemetry State Sync (~20 Hz) for Smooth UI Gauges
+      // 7. Throttled Telemetry State Sync (~20 Hz)
       uiTimer += dt;
       if (uiTimer >= 0.048) {
         uiTimer = 0;
@@ -720,7 +732,10 @@ export const App: React.FC = () => {
   }, []);
 
   return (
-    <main className="studio-root">
+    <main
+      className="studio-root"
+      style={{ '--ui-scale': uiScale } as React.CSSProperties}
+    >
       {/* Floor Technical Reticle Overlay */}
       <ReticleOverlay />
 
@@ -731,29 +746,31 @@ export const App: React.FC = () => {
         aria-label="Interactive 3D Spider Turret Viewport"
       />
 
-      {/* Top Header & Camera Preset Bar */}
-      <TopBar
-        telemetry={telemetry}
-        activeCamera={activeCamera}
-        orbit360={orbit360}
-        liveControl={liveControl}
-        onSelectCamera={handleSelectCamera}
-        onToggleOrbit360={handleToggleOrbit360}
-        onToggleLiveControl={handleToggleLiveControl}
-      />
+      {/* Left HUD Column (Header + Kinematics Panel + Ortho Strip) */}
+      <div className="hud-left-column">
+        <div className="hud-left-top-stack">
+          <TopLeftHeader telemetry={telemetry} />
+          <KinematicsPanel telemetry={telemetry} />
+        </div>
+        <OrthoStrip activeOrtho={activeOrtho} onSelectOrtho={handleSelectOrtho} />
+      </div>
 
-      {/* Left Floating Panel: Kinematics & Rotor Telemetry */}
-      <KinematicsPanel telemetry={telemetry} />
-
-      {/* Bottom-Left Dimensions Spec & Orthographic Switcher */}
-      <OrthoStrip activeOrtho={activeOrtho} onSelectOrtho={handleSelectOrtho} />
-
-      {/* Right Floating Panel: DWG-06 Sub-Assembly CAD Blueprints */}
-      <CadBlueprintsPanel
-        telemetry={telemetry}
-        activeModule={activeModule}
-        onSelectModule={handleSelectModule}
-      />
+      {/* Right HUD Column (Camera Bar + DWG-06 Sub-Assembly CAD Blueprints) */}
+      <div className="hud-right-column">
+        <TopRightCameraBar
+          activeCamera={activeCamera}
+          orbit360={orbit360}
+          liveControl={liveControl}
+          onSelectCamera={handleSelectCamera}
+          onToggleOrbit360={handleToggleOrbit360}
+          onToggleLiveControl={handleToggleLiveControl}
+        />
+        <CadBlueprintsPanel
+          telemetry={telemetry}
+          activeModule={activeModule}
+          onSelectModule={handleSelectModule}
+        />
+      </div>
 
       {/* Live Control Active Keyboard HUD Indicator */}
       {liveControl && (

@@ -78,13 +78,16 @@ export const SubAssemblyViewer: React.FC<SubAssemblyViewerProps> = ({
     if (!container) return;
 
     const scene = new THREE.Scene();
-    const width = container.clientWidth || 280;
-    const height = container.clientHeight || 120;
+    const width = container.offsetWidth || 280;
+    const height = container.offsetHeight || 120;
 
     const camera = new THREE.PerspectiveCamera(28, width / height, 0.1, 30);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio * 1.5, 3));
+    renderer.setSize(width, height, false);
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
@@ -106,42 +109,42 @@ export const SubAssemblyViewer: React.FC<SubAssemblyViewerProps> = ({
     let limbTibiaRef: THREE.Group | null = null;
 
     if (moduleId === '01') {
-      // Module 01: 6-Barrel Gatling Cannon (side profile facing right)
+      // Module 01: 6-Barrel Gatling Cannon (side profile facing right, centered vertically)
       const cannonClone = fullRig.cannonRecoilGroup;
       cannonClone.parent?.remove(cannonClone);
       applyCadBlueprintStyle(cannonClone, orangeRef);
-      cannonClone.position.set(-0.22, -0.04, 0);
+      cannonClone.position.set(-0.22, -0.02, 0);
       cannonClone.rotation.set(0.06, Math.PI * 0.52, 0);
       subjectGroup.add(cannonClone);
       barrelRotorRef = fullRig.barrelRotorGroup;
-      camera.position.set(0, 0.04, 4.35);
-      camera.lookAt(0, 0, 0);
+      camera.position.set(0, 0.04, 4.25);
+      camera.lookAt(0, 0.02, 0);
     } else if (moduleId === '02') {
-      // Module 02: Spherical Head & Exhausts (excluding cannon)
+      // Module 02: Spherical Head & Exhausts (excluding cannon, centered vertically)
       const headClone = fullRig.headPitchGroup;
       headClone.remove(fullRig.cannonPitchGroup);
       headClone.parent?.remove(headClone);
       applyCadBlueprintStyle(headClone, orangeRef);
-      headClone.position.set(0.05, -0.1, 0);
+      headClone.position.set(0.05, -0.04, 0);
       headClone.rotation.set(0.12, Math.PI * 0.62, 0);
       subjectGroup.add(headClone);
-      camera.position.set(0, 0.06, 3.2);
-      camera.lookAt(0, 0.02, 0);
+      camera.position.set(0, 0.06, 3.15);
+      camera.lookAt(0, 0.04, 0);
     } else {
       // Module 03: Articulated Spider Limb (centered in CAD frame)
       const singleLimb = fullRig.limbs[0].rootGroup;
       singleLimb.parent?.remove(singleLimb);
       singleLimb.rotation.set(0, -Math.PI * 0.5, 0);
-      singleLimb.position.set(0.74, 0.22, 0);
+      singleLimb.position.set(0.74, 0.25, 0);
       applyCadBlueprintStyle(singleLimb, orangeRef);
       subjectGroup.add(singleLimb);
       limbFemurRef = fullRig.limbs[0].femurPivot;
       limbTibiaRef = fullRig.limbs[0].tibiaPivot;
-      camera.position.set(0, -0.06, 3.85);
-      camera.lookAt(0, -0.08, 0);
+      camera.position.set(0, -0.03, 3.8);
+      camera.lookAt(0, -0.05, 0);
     }
 
-    // Allow subtle interactive dragging inside the CAD blueprint card
+    // Allow interactive dragging inside the CAD blueprint card
     let isDragging = false;
     let prevX = 0;
     let prevY = 0;
@@ -173,17 +176,18 @@ export const SubAssemblyViewer: React.FC<SubAssemblyViewerProps> = ({
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
 
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const w = entry.contentRect.width;
-        const h = entry.contentRect.height;
-        if (w > 0 && h > 0) {
-          camera.aspect = w / h;
-          camera.updateProjectionMatrix();
-          renderer.setSize(w, h);
-        }
+    const syncSize = () => {
+      if (!container) return;
+      const w = container.offsetWidth;
+      const h = container.offsetHeight;
+      if (w > 0 && h > 0) {
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h, false);
       }
-    });
+    };
+
+    const resizeObserver = new ResizeObserver(syncSize);
     resizeObserver.observe(container);
 
     let reqId = 0;
